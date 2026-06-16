@@ -96,7 +96,14 @@ function renderHeadings(headings) {
         html += '<details class="issue-details issue-' + issue.type + '">';
         html += '<summary class="issue-summary"><span class="issue-icon">' + issue.icon + '</span><span>' + escHtml(issue.message) + '</span><span class="details-toggle"></span></summary>';
         html += '<ul class="issue-detail-list">';
-        issue.items.forEach(function(item) { html += '<li>' + escHtml(item) + '</li>'; });
+        issue.items.forEach(function(it) {
+          var text = typeof it === 'string' ? it : it.text;
+          var id = typeof it === 'object' && it.lgcId ? it.lgcId : null;
+          html += '<li' + (id ? ' class="clickable" data-lgc="' + escHtml(id) + '" title="Klik om naar dit element te springen"' : '') + '>';
+          html += escHtml(text);
+          if (id) html += ' <span class="jump-hint">↗</span>';
+          html += '</li>';
+        });
         html += '</ul></details>';
       } else {
         html += '<div class="issue-item ' + issue.type + '"><span>' + issue.icon + '</span><span>' + escHtml(issue.message) + '</span></div>';
@@ -125,12 +132,13 @@ function renderHeadings(headings) {
     headings.forEach(function(h) {
       const indent = (h.level - 1) * 14;
       const isJump = prevLevel > 0 && h.level > prevLevel + 1;
-      html += '<div class="heading-item' + (isJump ? ' issue' : '') + '" style="padding-left:' + (indent + 6) + 'px">';
+      html += '<div class="heading-item clickable' + (isJump ? ' issue' : '') + '" style="padding-left:' + (indent + 6) + 'px"' + (h.lgcId ? ' data-lgc="' + escHtml(h.lgcId) + '" title="Klik om naar dit element te springen"' : '') + '>';
       html += '<span class="heading-badge h' + h.level + '-badge">h' + h.level + '</span>';
       if (h.source === 'class') html += '<span class="heading-source-badge">class</span>';
       if (h.source === 'aria') html += '<span class="heading-source-badge aria">aria</span>';
-      html += '<span class="heading-text" title="' + escHtml(h.text) + '">' + escHtml(h.text) + '</span>';
+      html += '<span class="heading-text">' + escHtml(h.text) + '</span>';
       if (isJump) html += '<span class="badge warn" style="margin-left:auto;font-size:10px;flex-shrink:0">⚠ overgeslagen</span>';
+      if (h.lgcId) html += '<span class="jump-hint">↗</span>';
       html += '</div>';
       prevLevel = h.level;
     });
@@ -150,25 +158,27 @@ function analyzeHeadings(headings) {
     issues.push({
       type: 'warning', icon: '⚠',
       message: h1s.length + ' H1-elementen gevonden — gebruik slechts één H1 per pagina.',
-      items: h1s.map(function(h) { return '"' + h.text + '"' + (h.source !== 'tag' ? ' (via ' + h.source + ')' : ''); })
+      items: h1s.map(function(h) { return { text: '"' + h.text + '"' + (h.source !== 'tag' ? ' (via ' + h.source + ')' : ''), lgcId: h.lgcId }; })
     });
   }
 
   let prevLevel = 0;
   let prevText = '';
+  let prevLgcId = null;
   headings.forEach(function(h) {
     if (prevLevel > 0 && h.level > prevLevel + 1) {
       issues.push({
         type: 'warning', icon: '⚠',
         message: 'Kopniveau overgeslagen: H' + prevLevel + ' → H' + h.level + ' (niveau H' + (prevLevel + 1) + ' ontbreekt).',
         items: [
-          'Vorig kop (H' + prevLevel + '): "' + prevText + '"',
-          'Volgend kop (H' + h.level + '): "' + h.text + '"'
+          { text: 'Vorig kop (H' + prevLevel + '): "' + prevText + '"', lgcId: prevLgcId },
+          { text: 'Volgend kop (H' + h.level + '): "' + h.text + '"', lgcId: h.lgcId }
         ]
       });
     }
     prevLevel = h.level;
     prevText = h.text;
+    prevLgcId = h.lgcId || null;
   });
 
   // Check if heading order is correct (h1 must be first heading)
@@ -176,7 +186,7 @@ function analyzeHeadings(headings) {
     issues.push({
       type: 'warning', icon: '⚠',
       message: 'De eerste kop op de pagina is geen H1 maar een H' + headings[0].level + '.',
-      items: ['Eerste kop: "' + headings[0].text + '" (H' + headings[0].level + ')']
+      items: [{ text: 'Eerste kop: "' + headings[0].text + '" (H' + headings[0].level + ')', lgcId: headings[0].lgcId }]
     });
   }
 
@@ -242,7 +252,14 @@ function renderWcag(wcag) {
         html += '<span class="wcag-detail">' + escHtml(item.result.detail || '') + '</span>';
         html += '</summary>';
         html += '<ul class="wcag-items-list">';
-        item.result.items.forEach(function(it) { html += '<li>' + escHtml(it) + '</li>'; });
+        item.result.items.forEach(function(it) {
+          var text = typeof it === 'string' ? it : it.text;
+          var id = typeof it === 'object' && it.lgcId ? it.lgcId : null;
+          html += '<li' + (id ? ' class="clickable" data-lgc="' + escHtml(id) + '" title="Klik om naar dit element te springen"' : '') + '>';
+          html += escHtml(text);
+          if (id) html += ' <span class="jump-hint">↗</span>';
+          html += '</li>';
+        });
         html += '</ul>';
         html += '</details>';
       } else {
@@ -364,14 +381,52 @@ function renderLinkResults(results, container) {
 
 function linkItemHtml(r, cssClass) {
   const code = r.status > 0 ? r.status : (r.error ? 'ERR' : '?');
-  const displayUrl = r.url.length > 60 ? r.url.substring(0, 57) + '…' : r.url;
+  const displayUrl = r.url.length > 55 ? r.url.substring(0, 52) + '…' : r.url;
   const errorNote = r.error ? ' — ' + escHtml(r.error) : '';
-  const redirectNote = r.finalUrl ? ' → ' + escHtml(r.finalUrl.substring(0, 40)) : '';
-  return '<div class="link-item">' +
+  const redirectNote = r.finalUrl ? ' → ' + escHtml(r.finalUrl.substring(0, 35)) : '';
+  const hasLgc = r.lgcId ? true : false;
+  return '<div class="link-item' + (hasLgc ? ' clickable' : '') + '"' +
+    (hasLgc ? ' data-lgc="' + escHtml(r.lgcId) + '" title="Klik om naar dit element te springen"' : '') + '>' +
     '<span class="link-status-code ' + cssClass + '">' + code + '</span>' +
     '<span class="link-url" title="' + escHtml(r.url) + '">' + escHtml(displayUrl) + errorNote + redirectNote + '</span>' +
+    (hasLgc ? '<span class="jump-hint">↗</span>' : '') +
     '</div>';
 }
+
+// ── Scroll-to-element ────────────────────────────────────────────────────────
+
+async function scrollToElement(lgcId) {
+  if (!lgcId) return;
+  const tab = await getActiveTab();
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: function(id) {
+      const el = document.querySelector('[data-lgc-id="' + id + '"]');
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prev = el.getAttribute('style') || '';
+      el.style.outline = '3px solid #40c97f';
+      el.style.outlineOffset = '4px';
+      el.style.transition = 'outline 0.3s';
+      setTimeout(function() {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.transition = '';
+      }, 2500);
+    },
+    args: [lgcId]
+  });
+}
+
+// ── Global click delegation for [data-lgc] items ─────────────────────────────
+
+document.addEventListener('click', function(e) {
+  const target = e.target.closest('[data-lgc]');
+  if (target && target.dataset.lgc) {
+    e.stopPropagation();
+    scrollToElement(target.dataset.lgc);
+  }
+});
 
 // ── Utility ─────────────────────────────────────────────────────────────────
 
@@ -383,9 +438,24 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function lgcAttr(lgcId) {
+  return lgcId ? ' class="clickable" data-lgc="' + escHtml(lgcId) + '" title="Klik om naar dit element te springen"' : '';
+}
+
 // ── Page check function (injected into the page via chrome.scripting) ────────
 
 function runPageChecks() {
+  // Assign unique IDs to elements so popup can scroll to them
+  var _lgcCounter = 0;
+  function assignId(el) {
+    var id = 'lgc-' + (_lgcCounter++);
+    el.setAttribute('data-lgc-id', id);
+    return id;
+  }
+  function item(text, el) {
+    return { text: text, lgcId: el ? assignId(el) : null };
+  }
+
   function collectHeadings() {
     // Build a combined selector: semantic h-tags + class-based (h1..h6) + ARIA headings
     const classSelectors = [1,2,3,4,5,6].map(function(n) { return '[class~="h' + n + '"]'; }).join(',');
@@ -416,7 +486,7 @@ function runPageChecks() {
       const info = getHeadingInfo(el);
       if (!info) return;
       const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ') || '[leeg]';
-      headings.push({ level: info.level, source: info.source, text: text });
+      headings.push({ level: info.level, source: info.source, text: text, lgcId: assignId(el) });
     });
     return headings;
   }
@@ -428,14 +498,14 @@ function runPageChecks() {
       const href = el.href;
       if (href && !seen.has(href)) {
         seen.add(href);
-        links.push({ url: href, text: (el.innerText || el.getAttribute('aria-label') || '').trim().substring(0, 80), type: 'anchor' });
+        links.push({ url: href, text: (el.innerText || el.getAttribute('aria-label') || '').trim().substring(0, 80), type: 'anchor', lgcId: assignId(el) });
       }
     });
     document.querySelectorAll('img[src]').forEach(function(el) {
       const src = el.src;
       if (src && !seen.has(src) && (src.startsWith('http://') || src.startsWith('https://'))) {
         seen.add(src);
-        links.push({ url: src, text: el.alt || '[afbeelding]', type: 'img' });
+        links.push({ url: src, text: el.alt || '[afbeelding]', type: 'img', lgcId: assignId(el) });
       }
     });
     return links;
@@ -498,7 +568,7 @@ function runPageChecks() {
         : missingAlt.length + ' van ' + imgs.length + ' afbeeldingen missen het alt-attribuut.',
       items: missingAlt.slice(0, 15).map(function(img) {
         var src = (img.getAttribute('src') || '').split('/').pop().substring(0, 60) || '(geen src)';
-        return 'Afbeelding zonder alt: ' + src;
+        return item('Afbeelding zonder alt: ' + src, img);
       })
     };
 
@@ -510,7 +580,7 @@ function runPageChecks() {
       detail: noLabel.length === 0
         ? 'Alle ' + inputs.length + ' formuliervelden hebben een label.'
         : noLabel.length + ' van ' + inputs.length + ' formuliervelden missen een label.',
-      items: noLabel.slice(0, 15).map(function(inp) { return 'Geen label: ' + elDesc(inp); })
+      items: noLabel.slice(0, 15).map(function(inp) { return item('Geen label: ' + elDesc(inp), inp); })
     };
 
     // 1.4.3 Contrast
@@ -530,7 +600,7 @@ function runPageChecks() {
         contrastIssues++;
         if (contrastProblems.length < 10) {
           contrastProblems.push(
-            elDesc(el) + ' contrast ' + ratio.toFixed(1) + ':1 (min. ' + (large ? 3 : 4.5) + ':1) — "' + el.innerText.trim().substring(0, 40) + '"'
+            item(elDesc(el) + ' contrast ' + ratio.toFixed(1) + ':1 (min. ' + (large ? 3 : 4.5) + ':1) — "' + el.innerText.trim().substring(0, 40) + '"', el)
           );
         }
       }
@@ -551,7 +621,7 @@ function runPageChecks() {
       const fs = parseFloat(getComputedStyle(el).fontSize);
       if (fs < 12) {
         smallText++;
-        if (smallTextItems.length < 10) smallTextItems.push(elDesc(el) + ' — ' + fs + 'px: "' + el.innerText.trim().substring(0, 40) + '"');
+        if (smallTextItems.length < 10) smallTextItems.push(item(elDesc(el) + ' — ' + fs + 'px: "' + el.innerText.trim().substring(0, 40) + '"', el));
       }
     });
     res['1.4.4'] = {
@@ -566,7 +636,7 @@ function runPageChecks() {
     interactive.slice(0, 50).forEach(function(el) {
       const s = getComputedStyle(el);
       if (s.outlineWidth === '0px' || s.outlineStyle === 'none') {
-        if (noFocusItems.length < 10) noFocusItems.push(elDesc(el));
+        if (noFocusItems.length < 10) noFocusItems.push(item('Geen zichtbare focus: ' + elDesc(el), el));
       }
     });
     res['2.1.1'] = {
@@ -574,7 +644,7 @@ function runPageChecks() {
       detail: noFocusItems.length === 0
         ? 'Geen elementen met outline:none (' + interactive.length + ' interactieve elementen).'
         : noFocusItems.length + ' interactieve elementen hebben mogelijk geen zichtbare focusindicator.',
-      items: noFocusItems.map(function(d) { return 'Geen zichtbare focus: ' + d; })
+      items: noFocusItems
     };
 
     // 2.4.1 Blokken omzeilen
@@ -587,7 +657,7 @@ function runPageChecks() {
     res['2.4.1'] = {
       status: hasSkip || landmarks.length >= 2 ? 'pass' : 'warn',
       detail: hasSkip ? 'Skiplink aanwezig.' : 'Landmarks gevonden: ' + (landmarks.join(', ') || 'geen') + '.',
-      items: !hasSkip && missing241.length > 0 ? missing241.map(function(m) { return 'Ontbreekt: ' + m + ' landmark'; }) : []
+      items: !hasSkip && missing241.length > 0 ? missing241.map(function(m) { return item('Ontbreekt: ' + m + ' landmark', null); }) : []
     };
 
     // 2.4.2 Paginatitel
@@ -611,7 +681,7 @@ function runPageChecks() {
     res['3.1.1'] = {
       status: lang && lang.trim() ? 'pass' : 'fail',
       detail: lang ? 'lang="' + lang + '" op <html>.' : '<html> mist het lang-attribuut.',
-      items: !lang ? ['Voeg lang="nl" (of andere taalcode) toe aan de <html> tag.'] : []
+      items: !lang ? [item('Voeg lang="nl" (of andere taalcode) toe aan de <html> tag.', null)] : []
     };
 
     // 3.3.2 Verplichte velden
@@ -624,7 +694,7 @@ function runPageChecks() {
         : reqNoLabel.length === 0
           ? 'Alle ' + req.length + ' verplichte velden hebben een label.'
           : reqNoLabel.length + ' van ' + req.length + ' verplichte velden missen een label.',
-      items: reqNoLabel.slice(0, 10).map(function(inp) { return 'Geen label: ' + elDesc(inp); })
+      items: reqNoLabel.slice(0, 10).map(function(inp) { return item('Geen label: ' + elDesc(inp), inp); })
     };
 
     // 4.1.2 Naam, rol, waarde
@@ -640,8 +710,8 @@ function runPageChecks() {
     });
     const issues412 = emptyBtns.length + emptyLinks.length;
     const items412 = [];
-    emptyBtns.slice(0, 8).forEach(function(b) { items412.push('Lege knop: ' + elDesc(b)); });
-    emptyLinks.slice(0, 8).forEach(function(a) { items412.push('Lege link: ' + (a.getAttribute('href') || '').substring(0, 60)); });
+    emptyBtns.slice(0, 8).forEach(function(b) { items412.push(item('Lege knop: ' + elDesc(b), b)); });
+    emptyLinks.slice(0, 8).forEach(function(a) { items412.push(item('Lege link: ' + (a.getAttribute('href') || '').substring(0, 60), a)); });
     res['4.1.2'] = {
       status: issues412 === 0 ? 'pass' : 'fail',
       detail: issues412 === 0

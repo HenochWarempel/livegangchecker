@@ -627,6 +627,35 @@ details.wcag-item[open] .wcag-status::after {
   margin-top: 1px;
 }
 
+/* ── Clickable / jump-to-element ─────────────────────── */
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  filter: brightness(0.94);
+}
+
+.jump-hint {
+  font-size: 10px;
+  opacity: 0.45;
+  flex-shrink: 0;
+  margin-left: 4px;
+  pointer-events: none;
+}
+
+.clickable:hover .jump-hint {
+  opacity: 0.9;
+}
+
+.issue-detail-list li.clickable:hover,
+.wcag-items-list li.clickable:hover {
+  background: #eef2ff;
+  border-color: #818cf8;
+  color: #3730a3;
+}
+
 /* ── Scrollbar ───────────────────────────────────────── */
 
 .content::-webkit-scrollbar {
