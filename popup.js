@@ -18,6 +18,35 @@ tabBtns.forEach(btn => {
   });
 });
 
+// ── Refresh button ──────────────────────────────────────────────────────────
+
+document.getElementById('btn-refresh').addEventListener('click', function() {
+  resetUI();
+  runChecks();
+});
+
+function resetUI() {
+  // Reset headings
+  document.getElementById('headings-loading').style.display = '';
+  document.getElementById('headings-content').style.display = 'none';
+  document.getElementById('headings-content').innerHTML = '';
+  // Reset wcag
+  document.getElementById('wcag-loading').style.display = '';
+  document.getElementById('wcag-content').style.display = 'none';
+  document.getElementById('wcag-content').innerHTML = '';
+  // Reset links
+  document.getElementById('links-loading').style.display = '';
+  document.getElementById('links-content').style.display = 'none';
+  document.getElementById('links-content').innerHTML = '';
+  // Reset meta
+  document.getElementById('meta-loading').style.display = '';
+  document.getElementById('meta-content').style.display = 'none';
+  document.getElementById('meta-content').innerHTML = '';
+  // Reset link checker state
+  allLinks = [];
+  checkingActive = false;
+}
+
 // ── Run content script on the active tab ───────────────────────────────────
 
 async function getActiveTab() {
@@ -64,23 +93,6 @@ async function runChecks() {
   initLinks(results.links);
   renderMeta(results.meta);
 }
-
-function resetUI() {
-  ['headings-loading','wcag-loading','links-loading','meta-loading'].forEach(function(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'flex';
-  });
-  ['headings-content','wcag-content','links-content','meta-content'].forEach(function(id) {
-    const el = document.getElementById(id);
-    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
-  });
-  checkingActive = false;
-}
-
-document.getElementById('btn-refresh').addEventListener('click', function() {
-  resetUI();
-  runChecks();
-});
 
 function showError(contentId, loadingId, message) {
   document.getElementById(loadingId).style.display = 'none';
@@ -220,7 +232,7 @@ const WCAG_META = {
   '1.3.1': { name: 'Info en relaties', group: 'Waarneembaar' },
   '1.4.3': { name: 'Contrast (minimum)', group: 'Waarneembaar' },
   '1.4.4': { name: 'Aanpasbare tekst', group: 'Waarneembaar' },
-  '1.4.5': { name: 'Afbeeldingsafmetingen & laadfouten', group: 'Waarneembaar' },
+  '1.4.5': { name: 'Afbeeldingsformaten', group: 'Waarneembaar' },
   '2.1.1': { name: 'Toetsenbord', group: 'Bedienbaar' },
   '2.4.1': { name: 'Blokken omzeilen', group: 'Bedienbaar' },
   '2.4.2': { name: 'Paginatitel', group: 'Bedienbaar' },
@@ -307,51 +319,58 @@ function renderMeta(meta) {
   document.getElementById('meta-loading').style.display = 'none';
   const container = document.getElementById('meta-content');
   container.style.display = 'block';
+
   if (!meta) {
     container.innerHTML = '<div class="issue-item error"><span>⚠️</span><span>Geen meta-data ontvangen.</span></div>';
     return;
   }
 
-  function metaRow(label, value, status, hint) {
-    const badgeClass = status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : status === 'warn' ? 'warn' : 'info';
-    const badgeLabel = status === 'pass' ? '✓ OK' : status === 'fail' ? '✗ Ontbreekt' : status === 'warn' ? '⚠ Let op' : 'ℹ Info';
+  function metaRow(label, badgeClass, badgeLabel, value) {
+    var displayVal = value ? escHtml(String(value).substring(0, 100)) : '<em style="opacity:0.5">afwezig</em>';
     return '<div class="meta-row">' +
-      '<div class="meta-row-top">' +
-        '<span class="meta-label">' + escHtml(label) + '</span>' +
-        '<span class="badge ' + badgeClass + '">' + badgeLabel + '</span>' +
-      '</div>' +
-      (value ? '<div class="meta-value">' + escHtml(value.substring(0, 120)) + (value.length > 120 ? '…' : '') + '</div>' : '') +
-      (hint ? '<div class="meta-hint">' + escHtml(hint) + '</div>' : '') +
-    '</div>';
+      '<span class="meta-label">' + escHtml(label) + '</span>' +
+      '<span class="meta-badge"><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></span>' +
+      '<span class="meta-value">' + displayVal + '</span>' +
+      '</div>';
   }
 
-  const title = meta.title || '';
-  const titleStatus = !title ? 'fail' : title.length < 20 ? 'warn' : title.length > 65 ? 'warn' : 'pass';
-  const titleHint = !title ? 'Voeg een <title> toe.' : title.length < 20 ? 'Titel erg kort (' + title.length + ' tekens, ideaal 30–65).' : title.length > 65 ? 'Titel erg lang (' + title.length + ' tekens, ideaal 30–65).' : title.length + ' tekens — prima.';
+  let html = '';
 
-  const desc = meta.desc || '';
-  const descStatus = !desc ? 'warn' : desc.length < 70 ? 'warn' : desc.length > 160 ? 'warn' : 'pass';
-  const descHint = !desc ? 'Voeg een meta description toe.' : desc.length < 70 ? 'Description erg kort (' + desc.length + ' tekens, ideaal 70–160).' : desc.length > 160 ? 'Description erg lang (' + desc.length + ' tekens, ideaal 70–160).' : desc.length + ' tekens — prima.';
+  // Paginatitel
+  var titleLen = meta.title ? meta.title.length : 0;
+  var titleBadge = !meta.title ? ['fail', '✗ Afwezig'] : titleLen < 30 ? ['warn', '⚠ Te kort'] : titleLen > 60 ? ['warn', '⚠ Te lang'] : ['pass', '✓ OK'];
+  html += metaRow('Paginatitel (' + titleLen + ' tekens)', titleBadge[0], titleBadge[1], meta.title);
 
-  const vpStatus = !meta.viewport ? 'fail' : meta.viewport.includes('width=device-width') ? 'pass' : 'warn';
-  const vpHint = !meta.viewport ? 'Voeg <meta name="viewport" content="width=device-width, initial-scale=1"> toe.' : !meta.viewport.includes('width=device-width') ? 'Viewport mist "width=device-width".' : null;
+  // Meta description
+  var descLen = meta.desc ? meta.desc.length : 0;
+  var descBadge = !meta.desc ? ['fail', '✗ Afwezig'] : descLen < 70 ? ['warn', '⚠ Te kort'] : descLen > 155 ? ['warn', '⚠ Te lang'] : ['pass', '✓ OK'];
+  html += metaRow('Meta description (' + descLen + ' tekens)', descBadge[0], descBadge[1], meta.desc);
 
-  const robotsStatus = !meta.robots ? 'info' : /noindex/i.test(meta.robots) ? 'warn' : 'pass';
-  const robotsHint = /noindex/i.test(meta.robots || '') ? 'Pagina wordt NIET geïndexeerd door zoekmachines!' : null;
+  // og:title
+  html += metaRow('og:title', meta.ogTitle ? 'pass' : 'warn', meta.ogTitle ? '✓ OK' : '⚠ Afwezig', meta.ogTitle);
 
-  let html = '<div class="section-header">Basiskwaliteit</div>';
-  html += metaRow('Paginatitel', title, titleStatus, titleHint);
-  html += metaRow('Meta description', desc, descStatus, descHint);
-  html += metaRow('Viewport', meta.viewport, vpStatus, vpHint);
-  html += metaRow('Robots', meta.robots || '(niet ingesteld)', robotsStatus, robotsHint);
-  html += metaRow('Canonical URL', meta.canonical, meta.canonical ? 'pass' : 'warn', !meta.canonical ? 'Overweeg een canonical link toe te voegen.' : null);
-  html += metaRow('Favicon', null, meta.favicon ? 'pass' : 'warn', meta.favicon ? 'Favicon aanwezig.' : 'Geen favicon gevonden.');
-  html += metaRow('Taal (lang)', meta.lang, meta.lang ? 'pass' : 'fail', !meta.lang ? 'Voeg lang="nl" toe aan <html>.' : null);
+  // og:description
+  html += metaRow('og:description', meta.ogDesc ? 'pass' : 'warn', meta.ogDesc ? '✓ OK' : '⚠ Afwezig', meta.ogDesc);
 
-  html += '<div class="section-header" style="margin-top:16px">Open Graph (social sharing)</div>';
-  html += metaRow('og:title', meta.ogTitle, meta.ogTitle ? 'pass' : 'warn', !meta.ogTitle ? 'Voeg <meta property="og:title"> toe.' : null);
-  html += metaRow('og:description', meta.ogDesc, meta.ogDesc ? 'pass' : 'warn', !meta.ogDesc ? 'Voeg <meta property="og:description"> toe.' : null);
-  html += metaRow('og:image', meta.ogImage, meta.ogImage ? 'pass' : 'warn', !meta.ogImage ? 'Voeg <meta property="og:image"> toe voor social previews.' : null);
+  // og:image
+  html += metaRow('og:image', meta.ogImage ? 'pass' : 'warn', meta.ogImage ? '✓ OK' : '⚠ Afwezig', meta.ogImage);
+
+  // Canonical
+  html += metaRow('Canonical URL', meta.canonical ? 'info' : 'info', meta.canonical ? 'ℹ Aanwezig' : 'ℹ Afwezig', meta.canonical);
+
+  // Viewport
+  var vpOk = meta.viewport && meta.viewport.includes('width=device-width');
+  html += metaRow('Viewport', vpOk ? 'pass' : 'fail', vpOk ? '✓ OK' : '✗ Onjuist', meta.viewport);
+
+  // Robots
+  var robotsNoindex = meta.robots && /noindex/i.test(meta.robots);
+  html += metaRow('Robots', robotsNoindex ? 'warn' : (meta.robots ? 'pass' : 'info'), robotsNoindex ? '⚠ noindex!' : (meta.robots ? '✓ OK' : 'ℹ Standaard'), meta.robots);
+
+  // Favicon
+  html += metaRow('Favicon', meta.favicon ? 'pass' : 'warn', meta.favicon ? '✓ Aanwezig' : '⚠ Afwezig', meta.favicon ? 'Favicon gevonden' : null);
+
+  // Theme color
+  html += metaRow('Theme color', meta.themeColor ? 'info' : 'info', meta.themeColor ? 'ℹ Aanwezig' : 'ℹ Afwezig', meta.themeColor);
 
   container.innerHTML = html;
 }
@@ -483,7 +502,6 @@ async function scrollToElement(lgcId) {
       const el = document.querySelector('[data-lgc-id="' + id + '"]');
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const prev = el.getAttribute('style') || '';
       el.style.outline = '3px solid #40c97f';
       el.style.outlineOffset = '4px';
       el.style.transition = 'outline 0.3s';
@@ -709,6 +727,19 @@ function runPageChecks() {
       items: smallTextItems
     };
 
+    // 1.4.5 Afbeeldingen zonder afmetingen + broken
+    const allImgsForDims = Array.from(document.querySelectorAll('img'));
+    const noDims = allImgsForDims.filter(function(img) { return !img.getAttribute('width') || !img.getAttribute('height'); });
+    const brokenImgs = allImgsForDims.filter(function(img) { return img.complete && img.naturalWidth === 0 && img.getAttribute('src'); });
+    const imgItems = [];
+    noDims.slice(0, 8).forEach(function(img) { imgItems.push(item('Geen width/height: ' + (img.getAttribute('src') || '').split('/').pop().substring(0, 50), img)); });
+    brokenImgs.slice(0, 8).forEach(function(img) { imgItems.push(item('Laadt niet: ' + (img.getAttribute('src') || '').split('/').pop().substring(0, 50), img)); });
+    res['1.4.5'] = {
+      status: (noDims.length === 0 && brokenImgs.length === 0) ? 'pass' : (brokenImgs.length > 0 ? 'fail' : 'warn'),
+      detail: (noDims.length === 0 && brokenImgs.length === 0) ? 'Alle afbeeldingen hebben afmetingen en laden correct.' : brokenImgs.length + ' afbeelding(en) laden niet, ' + noDims.length + ' missen width/height.',
+      items: imgItems
+    };
+
     // 2.1.1 Focusindicator
     const interactive = Array.from(document.querySelectorAll('a[href],button,input,select,textarea,[tabindex]'));
     const noFocusItems = [];
@@ -747,6 +778,27 @@ function runPageChecks() {
       items: []
     };
 
+    // 2.4.4 target=_blank zonder rel=noopener + PDF-links
+    const blankLinks = Array.from(document.querySelectorAll('a[target="_blank"]'));
+    const unsafeBlank = blankLinks.filter(function(a) {
+      const rel = (a.getAttribute('rel') || '');
+      return !rel.includes('noopener') && !rel.includes('noreferrer');
+    });
+    const docPattern = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip)(\?|#|$)/i;
+    const docLinks = Array.from(document.querySelectorAll('a[href]')).filter(function(a) {
+      if (!docPattern.test(a.getAttribute('href') || '')) return false;
+      const text = ((a.innerText || '') + (a.getAttribute('aria-label') || '') + (a.getAttribute('title') || '')).toLowerCase();
+      return !/(pdf|doc|word|excel|download|zip)/i.test(text);
+    });
+    const items244 = [];
+    unsafeBlank.slice(0, 8).forEach(function(a) { items244.push(item('target=_blank zonder rel=noopener: ' + ((a.innerText || '').trim().substring(0, 40) || a.href.substring(0, 40)), a)); });
+    docLinks.slice(0, 8).forEach(function(a) { items244.push(item('Documentlink zonder bestandstype: ' + (a.getAttribute('href') || '').split('/').pop().substring(0, 50), a)); });
+    res['2.4.4'] = {
+      status: items244.length === 0 ? 'pass' : 'fail',
+      detail: items244.length === 0 ? 'Geen linkdoel-problemen gevonden.' : unsafeBlank.length + ' onveilige externe link(s), ' + docLinks.length + ' documentlink(s) zonder aanduiding.',
+      items: items244
+    };
+
     // 2.4.6 Koppen
     const hCount = document.querySelectorAll('h1,h2,h3,h4,h5,h6').length;
     res['2.4.6'] = {
@@ -776,6 +828,38 @@ function runPageChecks() {
       items: reqNoLabel.slice(0, 10).map(function(inp) { return item('Geen label: ' + elDesc(inp), inp); })
     };
 
+    // 3.3.4 Formulieren
+    const forms = Array.from(document.querySelectorAll('form'));
+    const formItems = [];
+    forms.forEach(function(form) {
+      const hasSubmit = !!form.querySelector('button[type="submit"],input[type="submit"],button:not([type="button"]):not([type="reset"])');
+      const noAction = !form.getAttribute('action') && !form.getAttribute('novalidate');
+      if (!hasSubmit) formItems.push(item('Formulier zonder submit-knop: ' + elDesc(form), form));
+      if (noAction) formItems.push(item('Formulier zonder action-attribuut: ' + elDesc(form), form));
+    });
+    res['3.3.4'] = {
+      status: formItems.length === 0 ? 'pass' : 'warn',
+      detail: forms.length === 0 ? 'Geen formulieren gevonden.' : formItems.length === 0 ? 'Alle ' + forms.length + ' formulieren zijn compleet.' : formItems.length + ' formulierprobleem/problemen gevonden.',
+      items: formItems
+    };
+
+    // 4.1.1 Parsing – Duplicate IDs
+    const allIdEls = Array.from(document.querySelectorAll('[id]'));
+    const idCounts = {};
+    allIdEls.forEach(function(el) { idCounts[el.id] = (idCounts[el.id] || 0) + 1; });
+    const dupIds = Object.keys(idCounts).filter(function(id) { return idCounts[id] > 1; });
+    const dupItems = [];
+    dupIds.slice(0, 10).forEach(function(id) {
+      Array.from(document.querySelectorAll('[id="' + id + '"]')).slice(0, 3).forEach(function(el) {
+        dupItems.push(item('Duplicate id="' + id + '": ' + elDesc(el), el));
+      });
+    });
+    res['4.1.1'] = {
+      status: dupIds.length === 0 ? 'pass' : 'fail',
+      detail: dupIds.length === 0 ? 'Geen duplicate ID\'s gevonden.' : dupIds.length + ' duplicate ID-waarde(n) gevonden.',
+      items: dupItems
+    };
+
     // 4.1.2 Naam, rol, waarde
     const btns = Array.from(document.querySelectorAll('button,[role=button]'));
     const emptyBtns = btns.filter(function(b) {
@@ -799,105 +883,29 @@ function runPageChecks() {
       items: items412
     };
 
-    // 4.1.1 Duplicate IDs
-    const allIdEls = Array.from(document.querySelectorAll('[id]'));
-    const idCounts = {};
-    allIdEls.forEach(function(el) { idCounts[el.id] = (idCounts[el.id] || []).concat([el]); });
-    const dupIds = Object.keys(idCounts).filter(function(id) { return idCounts[id].length > 1; });
-    const dupItems = [];
-    dupIds.slice(0, 8).forEach(function(id) {
-      idCounts[id].slice(0, 3).forEach(function(el) {
-        dupItems.push(item('Duplicate id="' + id + '": ' + elDesc(el), el));
-      });
-    });
-    res['4.1.1'] = {
-      status: dupIds.length === 0 ? 'pass' : 'fail',
-      detail: dupIds.length === 0 ? 'Geen duplicate ID\'s gevonden.' : dupIds.length + ' duplicate ID-waarde(n) gevonden.',
-      items: dupItems
-    };
-
-    // 2.4.4 Linkdoel — target=_blank + documentlinks zonder aanduiding
-    const blankLinks = Array.from(document.querySelectorAll('a[target="_blank"]'));
-    const unsafeBlank = blankLinks.filter(function(a) {
-      const rel = a.getAttribute('rel') || '';
-      return !rel.includes('noopener') && !rel.includes('noreferrer');
-    });
-    const docPattern = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip)(\?|#|$)/i;
-    const docLinks = Array.from(document.querySelectorAll('a[href]')).filter(function(a) {
-      if (!docPattern.test(a.getAttribute('href') || '')) return false;
-      const text = ((a.innerText || '') + (a.getAttribute('aria-label') || '') + (a.getAttribute('title') || '')).toLowerCase();
-      return !/(pdf|doc|word|excel|download|zip)/i.test(text);
-    });
-    const items244 = [];
-    unsafeBlank.slice(0, 8).forEach(function(a) {
-      items244.push(item('target=_blank zonder rel=noopener: "' + ((a.innerText || '').trim().substring(0, 40) || a.href.substring(0, 40)) + '"', a));
-    });
-    docLinks.slice(0, 8).forEach(function(a) {
-      items244.push(item('Documentlink zonder bestandstype: ' + (a.getAttribute('href') || '').split('/').pop().substring(0, 50), a));
-    });
-    res['2.4.4'] = {
-      status: items244.length === 0 ? 'pass' : 'fail',
-      detail: items244.length === 0 ? 'Geen linkdoel-problemen.' : unsafeBlank.length + ' onveilige externe link(s), ' + docLinks.length + ' documentlink(s) zonder aanduiding.',
-      items: items244
-    };
-
-    // 1.4.5 Afbeeldingsafmetingen + broken images
-    const allImgsForDims = Array.from(document.querySelectorAll('img'));
-    const noDims = allImgsForDims.filter(function(img) { return !img.getAttribute('width') || !img.getAttribute('height'); });
-    const brokenImgs = allImgsForDims.filter(function(img) { return img.complete && img.naturalWidth === 0 && img.getAttribute('src'); });
-    const imgDimItems = [];
-    brokenImgs.slice(0, 8).forEach(function(img) {
-      imgDimItems.push(item('Laadt niet: ' + (img.getAttribute('src') || '').split('/').pop().substring(0, 50), img));
-    });
-    noDims.slice(0, 8).forEach(function(img) {
-      imgDimItems.push(item('Geen width/height: ' + (img.getAttribute('src') || '').split('/').pop().substring(0, 50), img));
-    });
-    res['1.4.5'] = {
-      status: brokenImgs.length > 0 ? 'fail' : noDims.length > 0 ? 'warn' : 'pass',
-      detail: (brokenImgs.length === 0 && noDims.length === 0) ? 'Alle afbeeldingen laden en hebben afmetingen.' : brokenImgs.length + ' afbeelding(en) laden niet, ' + noDims.length + ' missen width/height (veroorzaakt layout shift).',
-      items: imgDimItems
-    };
-
-    // 3.3.4 Formulieren
-    const forms = Array.from(document.querySelectorAll('form'));
-    const formItems = [];
-    forms.forEach(function(form) {
-      const hasSubmit = !!form.querySelector('button[type="submit"],input[type="submit"],button:not([type="button"]):not([type="reset"])');
-      const hasAction = !!(form.getAttribute('action') || form.getAttribute('data-action'));
-      if (!hasSubmit) formItems.push(item('Formulier zonder submit-knop: ' + elDesc(form), form));
-      if (!hasAction) formItems.push(item('Formulier zonder action-attribuut: ' + elDesc(form), form));
-    });
-    res['3.3.4'] = {
-      status: formItems.length === 0 ? 'pass' : 'warn',
-      detail: forms.length === 0 ? 'Geen formulieren gevonden.' : formItems.length === 0 ? 'Alle ' + forms.length + ' formulieren lijken compleet.' : formItems.length + ' formulierprobleem/problemen gevonden.',
-      items: formItems
-    };
-
     return res;
   }
 
   function collectMeta() {
-    function getMeta(selector) {
+    function getMetaContent(selector) {
       var el = document.querySelector(selector);
-      return el ? (el.getAttribute('content') || null) : null;
+      return el ? el.getAttribute('content') : null;
     }
-    function getHref(selector) {
+    function getMetaHref(selector) {
       var el = document.querySelector(selector);
-      return el ? (el.href || el.getAttribute('href') || null) : null;
+      return el ? (el.href || el.getAttribute('href')) : null;
     }
-    return {
-      title: document.title.trim(),
-      desc: getMeta('meta[name="description"]'),
-      ogTitle: getMeta('meta[property="og:title"]'),
-      ogDesc: getMeta('meta[property="og:description"]'),
-      ogImage: getMeta('meta[property="og:image"]'),
-      canonical: getHref('link[rel="canonical"]'),
-      viewport: getMeta('meta[name="viewport"]'),
-      robots: getMeta('meta[name="robots"]'),
-      favicon: !!document.querySelector('link[rel="icon"],link[rel="shortcut icon"],link[rel="apple-touch-icon"]'),
-      lang: document.documentElement.getAttribute('lang'),
-      url: location.href
-    };
+    var title = document.title.trim();
+    var desc = getMetaContent('meta[name="description"]');
+    var ogTitle = getMetaContent('meta[property="og:title"]');
+    var ogDesc = getMetaContent('meta[property="og:description"]');
+    var ogImage = getMetaContent('meta[property="og:image"]');
+    var canonical = getMetaHref('link[rel="canonical"]');
+    var viewport = getMetaContent('meta[name="viewport"]');
+    var robots = getMetaContent('meta[name="robots"]');
+    var favicon = !!document.querySelector('link[rel="icon"],link[rel="shortcut icon"],link[rel="apple-touch-icon"]');
+    var themeColor = getMetaContent('meta[name="theme-color"]');
+    return { title, desc, ogTitle, ogDesc, ogImage, canonical, viewport, robots, favicon, themeColor, url: location.href };
   }
 
   return {
