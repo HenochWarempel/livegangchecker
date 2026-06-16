@@ -86,17 +86,36 @@ function renderHeadings(headings) {
   const issues = analyzeHeadings(headings);
   let html = '';
 
+  // Issues block
+  html += '<div class="heading-issues">';
   if (issues.length === 0) {
-    html += '<div class="heading-issues"><div class="issue-item ok"><span>✓</span><span>H-structuur ziet er goed uit.</span></div></div>';
+    html += '<div class="issue-item ok"><span>✓</span><span>H-structuur ziet er goed uit — volgorde klopt.</span></div>';
   } else {
-    html += '<div class="heading-issues">';
     issues.forEach(function(issue) {
-      html += '<div class="issue-item ' + issue.type + '"><span>' + issue.icon + '</span><span>' + escHtml(issue.message) + '</span></div>';
+      if (issue.items && issue.items.length > 0) {
+        html += '<details class="issue-details issue-' + issue.type + '">';
+        html += '<summary class="issue-summary"><span class="issue-icon">' + issue.icon + '</span><span>' + escHtml(issue.message) + '</span><span class="details-toggle"></span></summary>';
+        html += '<ul class="issue-detail-list">';
+        issue.items.forEach(function(item) { html += '<li>' + escHtml(item) + '</li>'; });
+        html += '</ul></details>';
+      } else {
+        html += '<div class="issue-item ' + issue.type + '"><span>' + issue.icon + '</span><span>' + escHtml(issue.message) + '</span></div>';
+      }
     });
-    html += '</div>';
   }
+  html += '</div>';
 
-  html += '<div class="section-header">Koppenstructuur</div>';
+  // Heading count info
+  const semanticCount = headings.filter(function(h) { return h.source === 'tag'; }).length;
+  const classCount = headings.filter(function(h) { return h.source === 'class'; }).length;
+  const ariaCount = headings.filter(function(h) { return h.source === 'aria'; }).length;
+  let subtitle = headings.length + ' kopelementen gevonden';
+  const extras = [];
+  if (classCount > 0) extras.push(classCount + ' via CSS-klasse');
+  if (ariaCount > 0) extras.push(ariaCount + ' via ARIA');
+  if (extras.length) subtitle += ' (' + extras.join(', ') + ')';
+
+  html += '<div class="section-header">' + escHtml(subtitle) + '</div>';
 
   if (headings.length === 0) {
     html += '<div class="no-headings">Geen kopelementen (h1–h6) gevonden op deze pagina.</div>';
@@ -106,10 +125,12 @@ function renderHeadings(headings) {
     headings.forEach(function(h) {
       const indent = (h.level - 1) * 14;
       const isJump = prevLevel > 0 && h.level > prevLevel + 1;
-      html += '<div class="heading-item' + (isJump ? ' issue' : '') + '" style="padding-left:' + (indent + 6) + 'px" title="h' + h.level + '">';
-      html += '<span class="heading-badge">h' + h.level + '</span>';
-      html += '<span class="heading-text">' + escHtml(h.text) + '</span>';
-      if (isJump) html += '<span class="badge warn" style="margin-left:auto;font-size:10px">niveau overgeslagen</span>';
+      html += '<div class="heading-item' + (isJump ? ' issue' : '') + '" style="padding-left:' + (indent + 6) + 'px">';
+      html += '<span class="heading-badge h' + h.level + '-badge">h' + h.level + '</span>';
+      if (h.source === 'class') html += '<span class="heading-source-badge">class</span>';
+      if (h.source === 'aria') html += '<span class="heading-source-badge aria">aria</span>';
+      html += '<span class="heading-text" title="' + escHtml(h.text) + '">' + escHtml(h.text) + '</span>';
+      if (isJump) html += '<span class="badge warn" style="margin-left:auto;font-size:10px;flex-shrink:0">⚠ overgeslagen</span>';
       html += '</div>';
       prevLevel = h.level;
     });
@@ -124,18 +145,40 @@ function analyzeHeadings(headings) {
   const h1s = headings.filter(function(h) { return h.level === 1; });
 
   if (h1s.length === 0) {
-    issues.push({ type: 'error', icon: '✗', message: 'Geen H1 gevonden op deze pagina.' });
+    issues.push({ type: 'error', icon: '✗', message: 'Geen H1 gevonden op deze pagina.', items: [] });
   } else if (h1s.length > 1) {
-    issues.push({ type: 'warning', icon: '⚠', message: 'Meerdere H1\'s gevonden (' + h1s.length + 'x). Gebruik slechts één H1 per pagina.' });
+    issues.push({
+      type: 'warning', icon: '⚠',
+      message: h1s.length + ' H1-elementen gevonden — gebruik slechts één H1 per pagina.',
+      items: h1s.map(function(h) { return '"' + h.text + '"' + (h.source !== 'tag' ? ' (via ' + h.source + ')' : ''); })
+    });
   }
 
   let prevLevel = 0;
+  let prevText = '';
   headings.forEach(function(h) {
     if (prevLevel > 0 && h.level > prevLevel + 1) {
-      issues.push({ type: 'warning', icon: '⚠', message: 'Kopniveau overgeslagen: h' + prevLevel + ' → h' + h.level + '.' });
+      issues.push({
+        type: 'warning', icon: '⚠',
+        message: 'Kopniveau overgeslagen: H' + prevLevel + ' → H' + h.level + ' (niveau H' + (prevLevel + 1) + ' ontbreekt).',
+        items: [
+          'Vorig kop (H' + prevLevel + '): "' + prevText + '"',
+          'Volgend kop (H' + h.level + '): "' + h.text + '"'
+        ]
+      });
     }
     prevLevel = h.level;
+    prevText = h.text;
   });
+
+  // Check if heading order is correct (h1 must be first heading)
+  if (headings.length > 0 && headings[0].level !== 1 && h1s.length > 0) {
+    issues.push({
+      type: 'warning', icon: '⚠',
+      message: 'De eerste kop op de pagina is geen H1 maar een H' + headings[0].level + '.',
+      items: ['Eerste kop: "' + headings[0].text + '" (H' + headings[0].level + ')']
+    });
+  }
 
   return issues;
 }
@@ -187,12 +230,29 @@ function renderWcag(wcag) {
     groups[groupName].forEach(function(item) {
       const badgeClass = item.result.status === 'pass' ? 'pass' : item.result.status === 'fail' ? 'fail' : 'warn';
       const badgeLabel = item.result.status === 'pass' ? '✓ OK' : item.result.status === 'fail' ? '✗ Fout' : '⚠ Let op';
-      html += '<div class="wcag-item">';
-      html += '<span class="wcag-criterion">' + escHtml(item.criterion) + '</span>';
-      html += '<span class="wcag-name">' + escHtml(item.meta.name) + '</span>';
-      html += '<span class="wcag-status"><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></span>';
-      html += '<span class="wcag-detail">' + escHtml(item.result.detail || '') + '</span>';
-      html += '</div>';
+      const hasItems = item.result.items && item.result.items.length > 0;
+      const isExpandable = item.result.status !== 'pass' && hasItems;
+
+      if (isExpandable) {
+        html += '<details class="wcag-item wcag-details wcag-' + badgeClass + '">';
+        html += '<summary class="wcag-summary">';
+        html += '<span class="wcag-criterion">' + escHtml(item.criterion) + '</span>';
+        html += '<span class="wcag-name">' + escHtml(item.meta.name) + '</span>';
+        html += '<span class="wcag-status"><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></span>';
+        html += '<span class="wcag-detail">' + escHtml(item.result.detail || '') + '</span>';
+        html += '</summary>';
+        html += '<ul class="wcag-items-list">';
+        item.result.items.forEach(function(it) { html += '<li>' + escHtml(it) + '</li>'; });
+        html += '</ul>';
+        html += '</details>';
+      } else {
+        html += '<div class="wcag-item wcag-' + badgeClass + '">';
+        html += '<span class="wcag-criterion">' + escHtml(item.criterion) + '</span>';
+        html += '<span class="wcag-name">' + escHtml(item.meta.name) + '</span>';
+        html += '<span class="wcag-status"><span class="badge ' + badgeClass + '">' + badgeLabel + '</span></span>';
+        html += '<span class="wcag-detail">' + escHtml(item.result.detail || '') + '</span>';
+        html += '</div>';
+      }
     });
     html += '</div>';
   });
@@ -327,9 +387,36 @@ function escHtml(str) {
 
 function runPageChecks() {
   function collectHeadings() {
+    // Build a combined selector: semantic h-tags + class-based (h1..h6) + ARIA headings
+    const classSelectors = [1,2,3,4,5,6].map(function(n) { return '[class~="h' + n + '"]'; }).join(',');
+    const combined = 'h1,h2,h3,h4,h5,h6,' + classSelectors + ',[role="heading"]';
+
+    function getHeadingInfo(el) {
+      const tag = el.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(tag)) {
+        return { level: parseInt(tag[1]), source: 'tag' };
+      }
+      if (el.getAttribute('role') === 'heading') {
+        const lvl = parseInt(el.getAttribute('aria-level')) || 2;
+        return { level: lvl, source: 'aria' };
+      }
+      for (var i = 1; i <= 6; i++) {
+        if (el.classList.contains('h' + i)) return { level: i, source: 'class' };
+      }
+      return null;
+    }
+
+    const seen = new WeakSet();
     const headings = [];
-    document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(el) {
-      headings.push({ level: parseInt(el.tagName[1]), text: el.innerText.trim() || '[leeg]' });
+    document.querySelectorAll(combined).forEach(function(el) {
+      if (seen.has(el)) return;
+      seen.add(el);
+      // Skip elements nested inside a real h-tag (e.g. span inside h2)
+      if (el.closest('h1,h2,h3,h4,h5,h6') && !/^h[1-6]$/.test(el.tagName.toLowerCase())) return;
+      const info = getHeadingInfo(el);
+      if (!info) return;
+      const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ') || '[leeg]';
+      headings.push({ level: info.level, source: info.source, text: text });
     });
     return headings;
   }
@@ -391,6 +478,15 @@ function runPageChecks() {
   function runWcagChecks() {
     const res = {};
 
+    function elDesc(el) {
+      var tag = el.tagName.toLowerCase();
+      var id = el.id ? '#' + el.id : '';
+      var cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/)[0] : '';
+      var name = el.getAttribute('name') ? ' name="' + el.getAttribute('name') + '"' : '';
+      var type = el.getAttribute('type') ? ' type="' + el.getAttribute('type') + '"' : '';
+      return '<' + tag + id + cls + name + type + '>';
+    }
+
     // 1.1.1 Alt-teksten
     const imgs = Array.from(document.querySelectorAll('img'));
     const missingAlt = imgs.filter(function(img) { return !img.hasAttribute('alt'); });
@@ -399,7 +495,11 @@ function runPageChecks() {
       status: missingAlt.length === 0 ? 'pass' : 'fail',
       detail: missingAlt.length === 0
         ? 'Alle ' + imgs.length + ' afbeeldingen hebben een alt-attribuut (' + emptyAlt.length + ' leeg/decoratief).'
-        : missingAlt.length + ' van ' + imgs.length + ' afbeeldingen missen het alt-attribuut.'
+        : missingAlt.length + ' van ' + imgs.length + ' afbeeldingen missen het alt-attribuut.',
+      items: missingAlt.slice(0, 15).map(function(img) {
+        var src = (img.getAttribute('src') || '').split('/').pop().substring(0, 60) || '(geen src)';
+        return 'Afbeelding zonder alt: ' + src;
+      })
     };
 
     // 1.3.1 Labels
@@ -409,11 +509,13 @@ function runPageChecks() {
       status: noLabel.length === 0 ? 'pass' : 'fail',
       detail: noLabel.length === 0
         ? 'Alle ' + inputs.length + ' formuliervelden hebben een label.'
-        : noLabel.length + ' van ' + inputs.length + ' formuliervelden missen een label.'
+        : noLabel.length + ' van ' + inputs.length + ' formuliervelden missen een label.',
+      items: noLabel.slice(0, 15).map(function(inp) { return 'Geen label: ' + elDesc(inp); })
     };
 
     // 1.4.3 Contrast
     let contrastIssues = 0, contrastChecked = 0;
+    const contrastProblems = [];
     Array.from(document.querySelectorAll('p,span,a,li,td,th,h1,h2,h3,h4,h5,h6,label,button')).slice(0, 100).forEach(function(el) {
       if (!el.innerText || !el.innerText.trim()) return;
       const s = getComputedStyle(el);
@@ -424,38 +526,55 @@ function runPageChecks() {
       const ratio = contrastRatio(fg, bg);
       const fs = parseFloat(s.fontSize);
       const large = fs >= 18 || (parseInt(s.fontWeight) >= 700 && fs >= 14);
-      if (ratio < (large ? 3 : 4.5)) contrastIssues++;
+      if (ratio < (large ? 3 : 4.5)) {
+        contrastIssues++;
+        if (contrastProblems.length < 10) {
+          contrastProblems.push(
+            elDesc(el) + ' contrast ' + ratio.toFixed(1) + ':1 (min. ' + (large ? 3 : 4.5) + ':1) — "' + el.innerText.trim().substring(0, 40) + '"'
+          );
+        }
+      }
     });
     res['1.4.3'] = {
       status: contrastIssues === 0 ? 'pass' : 'warn',
       detail: contrastIssues === 0
         ? 'Geen contrastproblemen in ' + contrastChecked + ' gecontroleerde elementen.'
-        : contrastIssues + ' mogelijke contrastproblemen in ' + contrastChecked + ' elementen.'
+        : contrastIssues + ' mogelijke contrastproblemen in ' + contrastChecked + ' elementen.',
+      items: contrastProblems
     };
 
     // 1.4.4 Tekstgrootte
     let smallText = 0;
+    const smallTextItems = [];
     Array.from(document.querySelectorAll('p,span,a,li,td,h1,h2,h3,h4,h5,h6,label,button')).slice(0, 200).forEach(function(el) {
       if (!el.innerText || !el.innerText.trim()) return;
-      if (parseFloat(getComputedStyle(el).fontSize) < 12) smallText++;
+      const fs = parseFloat(getComputedStyle(el).fontSize);
+      if (fs < 12) {
+        smallText++;
+        if (smallTextItems.length < 10) smallTextItems.push(elDesc(el) + ' — ' + fs + 'px: "' + el.innerText.trim().substring(0, 40) + '"');
+      }
     });
     res['1.4.4'] = {
       status: smallText === 0 ? 'pass' : 'fail',
-      detail: smallText === 0 ? 'Geen tekstelementen kleiner dan 12px gevonden.' : smallText + ' elementen hebben tekst kleiner dan 12px.'
+      detail: smallText === 0 ? 'Geen tekstelementen kleiner dan 12px gevonden.' : smallText + ' elementen hebben tekst kleiner dan 12px.',
+      items: smallTextItems
     };
 
     // 2.1.1 Focusindicator
     const interactive = Array.from(document.querySelectorAll('a[href],button,input,select,textarea,[tabindex]'));
-    let noFocus = 0;
+    const noFocusItems = [];
     interactive.slice(0, 50).forEach(function(el) {
       const s = getComputedStyle(el);
-      if (s.outlineWidth === '0px' || s.outlineStyle === 'none') noFocus++;
+      if (s.outlineWidth === '0px' || s.outlineStyle === 'none') {
+        if (noFocusItems.length < 10) noFocusItems.push(elDesc(el));
+      }
     });
     res['2.1.1'] = {
-      status: noFocus === 0 ? 'pass' : 'warn',
-      detail: noFocus === 0
+      status: noFocusItems.length === 0 ? 'pass' : 'warn',
+      detail: noFocusItems.length === 0
         ? 'Geen elementen met outline:none (' + interactive.length + ' interactieve elementen).'
-        : noFocus + ' interactieve elementen hebben mogelijk geen zichtbare focusindicator.'
+        : noFocusItems.length + ' interactieve elementen hebben mogelijk geen zichtbare focusindicator.',
+      items: noFocusItems.map(function(d) { return 'Geen zichtbare focus: ' + d; })
     };
 
     // 2.4.1 Blokken omzeilen
@@ -463,31 +582,36 @@ function runPageChecks() {
     const hasMain = !!document.querySelector('main,[role=main]');
     const hasNav = !!document.querySelector('nav,[role=navigation]');
     const hasHeader = !!document.querySelector('header,[role=banner]');
-    const landmarks = [hasMain && 'main', hasNav && 'nav', hasHeader && 'header'].filter(Boolean);
+    const landmarks = [hasMain && '<main>', hasNav && '<nav>', hasHeader && '<header>'].filter(Boolean);
+    const missing241 = [!hasMain && '<main>', !hasNav && '<nav>', !hasHeader && '<header>'].filter(Boolean);
     res['2.4.1'] = {
       status: hasSkip || landmarks.length >= 2 ? 'pass' : 'warn',
-      detail: hasSkip ? 'Skiplink aanwezig.' : 'Landmarks: ' + (landmarks.join(', ') || 'geen') + '.'
+      detail: hasSkip ? 'Skiplink aanwezig.' : 'Landmarks gevonden: ' + (landmarks.join(', ') || 'geen') + '.',
+      items: !hasSkip && missing241.length > 0 ? missing241.map(function(m) { return 'Ontbreekt: ' + m + ' landmark'; }) : []
     };
 
     // 2.4.2 Paginatitel
     const title = document.title.trim();
     res['2.4.2'] = {
       status: title ? 'pass' : 'fail',
-      detail: title ? 'Paginatitel: "' + title + '".' : 'Pagina heeft geen titel (<title> leeg of afwezig).'
+      detail: title ? 'Paginatitel: "' + title + '".' : 'Pagina heeft geen titel (<title> leeg of afwezig).',
+      items: []
     };
 
     // 2.4.6 Koppen
     const hCount = document.querySelectorAll('h1,h2,h3,h4,h5,h6').length;
     res['2.4.6'] = {
       status: hCount > 0 ? 'pass' : 'fail',
-      detail: hCount > 0 ? hCount + ' kopelementen gevonden.' : 'Geen kopelementen (h1-h6) gevonden.'
+      detail: hCount > 0 ? hCount + ' kopelementen gevonden.' : 'Geen kopelementen (h1-h6) gevonden.',
+      items: []
     };
 
     // 3.1.1 Taal
     const lang = document.documentElement.getAttribute('lang');
     res['3.1.1'] = {
       status: lang && lang.trim() ? 'pass' : 'fail',
-      detail: lang ? 'lang="' + lang + '" op <html>.' : '<html> mist het lang-attribuut.'
+      detail: lang ? 'lang="' + lang + '" op <html>.' : '<html> mist het lang-attribuut.',
+      items: !lang ? ['Voeg lang="nl" (of andere taalcode) toe aan de <html> tag.'] : []
     };
 
     // 3.3.2 Verplichte velden
@@ -499,7 +623,8 @@ function runPageChecks() {
         ? 'Geen verplichte formuliervelden gevonden.'
         : reqNoLabel.length === 0
           ? 'Alle ' + req.length + ' verplichte velden hebben een label.'
-          : reqNoLabel.length + ' van ' + req.length + ' verplichte velden missen een label.'
+          : reqNoLabel.length + ' van ' + req.length + ' verplichte velden missen een label.',
+      items: reqNoLabel.slice(0, 10).map(function(inp) { return 'Geen label: ' + elDesc(inp); })
     };
 
     // 4.1.2 Naam, rol, waarde
@@ -514,11 +639,15 @@ function runPageChecks() {
       return !(a.innerText && a.innerText.trim()) && !(a.getAttribute('aria-label') && a.getAttribute('aria-label').trim()) && !(a.getAttribute('title') && a.getAttribute('title').trim()) && !a.querySelector('img[alt]');
     });
     const issues412 = emptyBtns.length + emptyLinks.length;
+    const items412 = [];
+    emptyBtns.slice(0, 8).forEach(function(b) { items412.push('Lege knop: ' + elDesc(b)); });
+    emptyLinks.slice(0, 8).forEach(function(a) { items412.push('Lege link: ' + (a.getAttribute('href') || '').substring(0, 60)); });
     res['4.1.2'] = {
       status: issues412 === 0 ? 'pass' : 'fail',
       detail: issues412 === 0
         ? 'Alle ' + btns.length + ' knoppen en ' + anchors.length + ' links hebben toegankelijke namen.'
-        : emptyBtns.length + ' lege knop(pen) en ' + emptyLinks.length + ' lege link(s) gevonden.'
+        : emptyBtns.length + ' lege knop(pen) en ' + emptyLinks.length + ' lege link(s) gevonden.',
+      items: items412
     };
 
     return res;
