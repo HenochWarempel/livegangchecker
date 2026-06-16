@@ -3,11 +3,13 @@
   "name": "LiveGang Checker",
   "version": "1.0.0",
   "description": "Pre-launch website checker: H-structuur, WCAG en links.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
   "host_permissions": ["<all_urls>"],
   "action": {
-    "default_popup": "popup.html",
     "default_title": "LiveGang Checker"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"

@@ -31,9 +31,8 @@
 }
 
 html, body {
-  width: 500px;
-  min-height: 540px;
-  max-height: 600px;
+  width: 100%;
+  height: 100vh;
   overflow: hidden;
   font-family: var(--font);
   font-size: 13px;
@@ -46,11 +45,11 @@ html, body {
 
 .app {
   display: flex;
-  height: 600px;
+  height: 100vh;
 }
 
 .sidebar {
-  width: 148px;
+  width: 130px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   display: flex;
@@ -109,6 +108,25 @@ html, body {
 .tab-btn .tab-icon {
   font-size: 14px;
   flex-shrink: 0;
+}
+
+.refresh-btn {
+  margin: 8px 10px 0;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: var(--text-sidebar);
+  font-size: 11.5px;
+  cursor: pointer;
+  width: calc(100% - 20px);
+  text-align: center;
+  transition: background 0.15s;
+}
+
+.refresh-btn:hover {
+  background: rgba(255,255,255,0.13);
+  color: #fff;
 }
 
 .sidebar-footer {
@@ -627,6 +645,43 @@ details.wcag-item[open] .wcag-status::after {
   margin-top: 1px;
 }
 
+/* ── Meta/SEO Tab ────────────────────────────────────── */
+
+.meta-row {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 2px 8px;
+}
+
+.meta-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.meta-badge {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+}
+
+.meta-value {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
 /* ── Clickable / jump-to-element ─────────────────────── */
 
 .clickable {
@@ -655,6 +710,49 @@ details.wcag-item[open] .wcag-status::after {
   border-color: #818cf8;
   color: #3730a3;
 }
+
+/* ── Scrollbar ───────────────────────────────────────── */
+
+/* ── Meta/SEO Tab ────────────────────────────────────── */
+
+.meta-row {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+}
+
+.meta-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.meta-label {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.meta-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-top: 2px;
+}
+
+.meta-hint {
+  font-size: 11px;
+  color: var(--warn);
+  margin-top: 3px;
+}
+
+.meta-row:has(.badge.fail) .meta-hint { color: var(--fail); }
+.meta-row:has(.badge.pass) .meta-hint { color: var(--pass); }
 
 /* ── Scrollbar ───────────────────────────────────────── */
 

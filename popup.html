@@ -27,6 +27,11 @@
         <span class="tab-icon">🔗</span>
         Link Checker
       </button>
+      <button class="tab-btn" data-tab="meta" aria-selected="false">
+        <span class="tab-icon">🔍</span> Meta/SEO
+      </button>
+
+      <button class="refresh-btn" id="btn-refresh" title="Pagina opnieuw scannen">↺ Scannen</button>
 
       <div class="sidebar-footer">v1.0.0</div>
     </nav>
@@ -59,6 +64,12 @@
           <span>Links verzamelen…</span>
         </div>
         <div id="links-content" style="display:none"></div>
+      </section>
+
+      <!-- Tab: Meta/SEO -->
+      <section class="tab-panel" id="panel-meta" role="tabpanel" aria-label="Meta / SEO">
+        <div class="loading" id="meta-loading"><div class="spinner"></div><span>Meta-data ophalen…</span></div>
+        <div id="meta-content" style="display:none"></div>
       </section>
 
     </main>
